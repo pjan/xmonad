@@ -1,0 +1,58 @@
+name:         my-xmonad
+version:      0.0.1.0
+github:       "pjan/xmonad"
+license:      MIT
+license-file: LICENSE.md
+author:       "pjan vandaele"
+maintainer:   "pjan@pjan.io"
+copyright:    "2018 pjan vandaele"
+
+# Metadata used when publishing your package
+# synopsis:     Short description of your package
+# category:     Web
+
+description:  Please see the README on Github at <https://github.com/pjan/xmonad#readme>
+
+flags:
+  documentation:
+    description: link documentation to source
+    manual: yes
+    default: no
+
+extra-source-files:
+- package.yaml
+- LICENSE.md
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wredundant-constraints
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- data-default
+- taffybar
+- xmonad
+- xmonad-contrib
+
+library:
+  source-dirs: lib
+
+  when:
+  - condition: flag(documentation)
+    dependencies: hscolour
+
+executables:
+  my-xmonad-exe:
+    main:        xmonad.hs
+    source-dirs: ./.
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - my-xmonad
+
