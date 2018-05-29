@@ -8,6 +8,7 @@
     cabal-helper
     cabal-install
     ghc-mod
+    ghcid
     haskdogs
     hasktags
     hlint

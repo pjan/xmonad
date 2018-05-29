@@ -1,4 +1,4 @@
 language: nix
 
 script:
-- nix-build
+- travis_wait 30 nix-build

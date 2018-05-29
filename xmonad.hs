@@ -8,11 +8,13 @@
 -------------------------------------------------------------------------------
 
 import Data.Default (def)
+import Data.Monoid (Endo)
 import qualified Data.Map as M
 import System.IO (hClose)
 import System.Taffybar.Hooks.PagerHints (pagerHints)
 
 import XMonad hiding ((|||))
+
 
 import XMonad.Actions.ConditionalKeys (bindOn, XCond(..))
 import XMonad.Actions.CycleWS
@@ -93,7 +95,7 @@ myConfig = def
   , modMask            = myModMask
   , mouseBindings      = myMouseBindings
   , startupHook        = myStartupHook
-  , terminal           = myTerminal
+  , terminal           = command myTerminal
   , workspaces         = myWorkspaces
   }
 
@@ -213,19 +215,19 @@ projects :: [Project]
 projects =
   [ Project { projectName = wsTERM
             , projectDirectory = "~/"
-            , projectStartHook = Just $ spawnOn wsTERM myTerminal
+            , projectStartHook = Just $ spawnOn wsTERM (command myTerminal)
             }
   , Project { projectName = wsWEB
             , projectDirectory = "~/"
-            , projectStartHook = Just $ spawnOn wsWEB myBrowser
+              , projectStartHook = Just $ spawnOn wsWEB (command myBrowser)
             }
   , Project { projectName = wsWORKTERM
             , projectDirectory = "~/"
-            , projectStartHook = Just $ spawnOn wsWORKTERM myTerminal
+            , projectStartHook = Just $ spawnOn wsWORKTERM (command myTerminal)
             }
   , Project { projectName = wsMONITOR
             , projectDirectory = "~/"
-            , projectStartHook = Just $ spawnOn wsMONITOR glances
+            , projectStartHook = Just $ spawnOn wsMONITOR (command glances)
             }
   ]
 
@@ -263,11 +265,27 @@ myKeys config =
     ---------------------------------------------------------------------------
     keySet "Launchers"
       [ key "Launcher"                              "M-<Space>"       $ spawn myLauncher
-      , key "Terminal"                              "M-<Return>"      $ spawn myTerminal
-      , key "Spotify"                               "M-m"             $ namedScratchpadAction myScratchpads "spotify"
-      , key "Mixer"                                 "M-v"             $ namedScratchpadAction myScratchpads "alsamixer"
-      , key "Console"                               "M-c"             $ namedScratchpadAction myScratchpads "console"
+      , key "Terminal"                              "M-<Return>"      $ spawnApp myTerminal
+      , key "Browser"                               "M-/"             $ spawnApp myBrowser
+      , key "Spotify"                               "M-="             $ namedScratchpadAction myScratchpads "spotify"
+      , key "Mixer"                                 "M--"             $ namedScratchpadAction myScratchpads "alsamixer"
+      , key "Console"                               "M-<Esc>"         $ namedScratchpadAction myScratchpads "console"
       , key "VLC"                                   "M-x v"           $ namedScratchpadAction myScratchpads "vlc"
+      , key "Slack"                                 "M-s"             $ bindOn WS [ (wsWORKTERM, namedScratchpadAction myScratchpads "workSlack")
+                                                                                  , (wsWORKWEB, namedScratchpadAction myScratchpads "workSlack")
+                                                                                  ]
+      , key "Calendar"                              "M-c"             $ bindOn WS [ (wsWORKTERM, namedScratchpadAction myScratchpads "workCalendar")
+                                                                                  , (wsWORKWEB, namedScratchpadAction myScratchpads "workCalendar")
+                                                                                  , ("", namedScratchpadAction myScratchpads "personalCalendar")
+                                                                                  ]
+      , key "Mail"                                  "M-m"             $ bindOn WS [ (wsWORKTERM, namedScratchpadAction myScratchpads "workMail")
+                                                                                  , (wsWORKWEB, namedScratchpadAction myScratchpads "workMail")
+                                                                                  -- , ("", namedScratchpadAction myScratchpads "personalMail")
+                                                                                  ]
+      , key "Trello"                                "M-t"             $ bindOn WS [ (wsWORKTERM, namedScratchpadAction myScratchpads "workTrello")
+                                                                                  , (wsWORKWEB, namedScratchpadAction myScratchpads "workTrello")
+                                                                                    , ("", namedScratchpadAction myScratchpads "personalTrello")
+                                                                                  ]
       ]
     ^++^
     ---------------------------------------------------------------------------
@@ -310,7 +328,7 @@ myKeys config =
     keySet "System"
       [ key "Restart XMonad"                        "M-q"             $ spawn "xmonad --restart"
       , key "Rebuild & Restart XMonad"              "M-C-q"           $ spawn "xmonad --recompile && xmonad --restart"
-      , key "Lock Screen"                           "M-s"             $ spawn "sleep 1; xset s activate"
+      , key "Lock Screen"                           "M-`"             $ spawn "sleep 1; xset s activate"
       ]
     ^++^
     ---------------------------------------------------------------------------
@@ -368,11 +386,12 @@ myKeys config =
 
     dirKeys   = ["j", "k", "h", "l"]
     dirs      = [D, U, L, R ]
-    wsKeys    = map show $ [1..9] ++ [0]
+    wsKeys    = map show [1..9] -- ++ [0]
     arrowKeys = ["<D>", "<U>", "<L>", "<R>"]
 
     withSelection cmd = getSelection >>= spawn . cmd
 
+    spawnApp = spawn . command
 
     zipM m nm ks as f = zipWith (\k d -> key nm (m ++ k) (f d)) ks as
 
@@ -381,7 +400,7 @@ myKeys config =
                       then W.sink w s
                       else W.float w (W.RationalRect (1/5) (1/5) (3/5) (7/10)) s
 
-    tryMessageR x y = sequence_ [(tryMessage_ x y), refresh]
+    tryMessageR x y = sequence_ [tryMessage_ x y, refresh]
 
     nextNonEmptyWS = findWorkspace getSortByIndexNoSP Next HiddenNonEmptyWS 1
             >>= \t -> (windows . W.view $ t)
@@ -403,39 +422,50 @@ showKeybindings x = addName "Show Keybindings" $ io $ do
 -- Applications                                                             {{{
 -------------------------------------------------------------------------------
 
-myBrowser        = "chromium" -- TODO: maybe custom script that is workspace aware
-myBrowserClass   = "chromium-browser"
-myTerminal       = "kitty"
-myTerminalClass  = "kitty"
-myLauncher       = "rofi -matching fuzzy -modi combi -show combi -combi-modi run,drun"
+data App
+  = ClassApp String String
+  | ResourceApp String String
 
-spotify          = "spotify"
-spotifyClass     = "Spotify"
-isSpotify        = className =? spotifyClass
+command :: App -> String
+command (ClassApp c _) = c
+command (ResourceApp c _) = c
 
-alsamixer        = "kitty --class alsamixer --title alsamixer alsamixer"
-alsamixerClass   = "alsamixer"
-isAlsamixer      = className =? alsamixerClass
+isInstance :: App -> Query Bool
+isInstance (ClassApp _ c) = className =? c
+isInstance (ResourceApp _ r) = resource =? r
 
-vlc              = "vlc"
-vlcResource      = "vlc"
-isVLC            = resource =? vlcResource
+myBrowser         = ClassApp     "browser"                                                      "chromium-browser"
+myTerminal        = ClassApp     "kitty"                                                        "kitty"
+spotify           = ClassApp     "spotify"                                                      "Spotify"
+alsamixer         = ClassApp     "kitty --class alsamixer --title alsamixer alsamixer"          "alsamixer"
+vlc               = ResourceApp  "vlc"                                                          "vlc"
+workSlack         = ResourceApp  "dex $HOME/.local/share/applications/WorkSlack.desktop"        "crx_nfjipldfidfkljfhmnjigbhfljfpemba"
+workCalendar      = ResourceApp  "dex $HOME/.local/share/applications/WorkCalendar.desktop"     "crx_kjbdgfilnfhdoflbpgamdcdgpehopbep"
+workMail          = ResourceApp  "dex $HOME/.local/share/applications/WorkMail.desktop"         "crx_kmhopmchchfpfdcdjodmpfaaphdclmlj"
+workTrello        = ResourceApp  "dex $HOME/.local/share/applications/WorkTrello.desktop"       "crx_mpdjpnmmnkoappfachmpbalmgmdnmgij"
+personalCalendar  = ResourceApp  "dex $HOME/.local/share/applications/PersonalCalendar.desktop" "crx_cekbafhmingmmacionoegcmednbmapkh"
+-- personalMail      = ResourceApp  "dex $HOME/.local/share/applications/PersonalMail.desktop"     "crx_kmhopmchchfpfdcdjodmpfaaphdclmlj"
+personalTrello    = ResourceApp  "dex $HOME/.local/share/applications/PersonalTrello.desktop"   "crx_pkheepclhaffooboabnelkgnboncfbbf"
+console           = ClassApp     "kitty --class console --title console"                        "console"
+glances           = ClassApp     "kitty --class glances --title glances glances"                "glances"
 
-console          = "kitty --class console --title console"
-consoleClass     = "console"
-isConsole        = resource =? consoleClass
-
-glances          = "kitty --class glances --title glances glances"
-glancesClass     = "glances"
-isGlances        = className =? glancesClass
-
+myLauncher        = "rofi -matching fuzzy -modi combi -show combi -combi-modi run,drun"
 
 myScratchpads =
-  [ (NS "spotify" spotify isSpotify defaultFloating)
-  , (NS "alsamixer" alsamixer isAlsamixer (customFloating $ W.RationalRect (1/6) (1/6) (2/3) (2/3)))
-  , (NS "vlc" vlc isVLC defaultFloating)
-  , (NS "console" console isConsole (customFloating $ W.RationalRect 0 0 1 (1/2)))
-  ]
+  [ scratchpadApp "spotify"          spotify          defaultFloating
+  , scratchpadApp "alsamixer"        alsamixer        (customFloating $ W.RationalRect (1/6) (1/6) (2/3) (2/3))
+  , scratchpadApp "vlc"              vlc              defaultFloating
+  , scratchpadApp "console"          console          (customFloating $ W.RationalRect 0 0 1 (1/2))
+  , scratchpadApp "workSlack"        workSlack        defaultFloating
+  , scratchpadApp "workCalendar"     workCalendar     defaultFloating
+  , scratchpadApp "workMail"         workMail         defaultFloating
+  , scratchpadApp "workTrello"       workTrello       defaultFloating
+  , scratchpadApp "personalCalendar" personalCalendar defaultFloating
+  -- , scratchpadApp "personalMail"     personalMail     defaultFloating
+  , scratchpadApp "personalTrello"   personalTrello   defaultFloating
+  ] where
+    scratchpadApp :: String -> App -> Query (Endo WindowSet) -> NamedScratchpad
+    scratchpadApp n a f = NS n (command a) (isInstance a) f
 
 ----------------------------------------------------------------------------}}}
 -- Navigation                                                               {{{
@@ -488,6 +518,7 @@ myLayoutHook = showWorkspaceName
                     $ mySpacing
                     $ (suffixed "Standard 2/3" $ ResizableTall 1 (1/20) (2/3) [])
                   ||| (suffixed "Standard 1/2" $ ResizableTall 1 (1/20) (1/2) [])
+                  ||| (trimSuffixed 1 "Standard BSP" $ hiddenWindows emptyBSP)
 
     -- Tabs Layout
     tabs = named "Tabs"
@@ -519,8 +550,10 @@ myLogHook =
 myFadeHook = composeAll
   [ opaque
   , isUnfocused --> opacity 0.85
-  , (className =? myTerminalClass) <&&> (isUnfocused) --> opacity 0.9
-  , isConsole --> opacity 0.9
+  , isInstance myTerminal <&&> isUnfocused --> opacity 0.9
+  , (isInstance workSlack <||> isInstance workCalendar <||> isInstance workMail <||> isInstance workTrello) <&&> isUnfocused --> opaque
+  , (isInstance personalCalendar <||> isInstance personalTrello) <&&> isUnfocused --> opaque
+  , isInstance console --> opacity 0.9
   , isDialog --> opaque
   ]
 
@@ -537,8 +570,8 @@ myManageHook =
   where
     manageApps = composeOne
       -- Applications
-      [ isVLC                              -?> doFloat
-      , isSpotify                          -?> doFloat
+      [ isInstance vlc                     -?> doFloat
+      , isInstance spotify                 -?> doFloat
       -- Dialogs
       , isBrowserDialog                    -?> forceCenterFloat
       , isFileChooserDialog                -?> forceCenterFloat
@@ -550,7 +583,7 @@ myManageHook =
       , isFullscreen                       -?> doFullFloat
       , pure True                          -?> tileBelow
       ]
-    isBrowserDialog     = isDialog <&&> className =? myBrowserClass
+    isBrowserDialog     = isDialog <&&> isInstance myBrowser
     isFileChooserDialog = isRole =? "GtkFileChooserDialog"
     isPopup             = isRole =? "pop-up"
     isSplash            = isInProperty "_NET_WM_WINDOW_TYPE" "_NET_WM_WINDOW_TYPE_SPLASH"
